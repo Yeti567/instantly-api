@@ -483,9 +483,13 @@ function applyCors(headers: Headers, req: Request): void {
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Vary", "Origin");
   headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  // Echo back whatever headers the preflight asks to send, so we never reject
+  // a header the client needs. Fall back to a sensible default list.
+  const requested = req.headers.get("access-control-request-headers");
   headers.set(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, Accept, mcp-session-id, mcp-protocol-version",
+    requested ??
+      "Content-Type, Authorization, Accept, mcp-session-id, mcp-protocol-version",
   );
   headers.set("Access-Control-Expose-Headers", "mcp-session-id");
   headers.set("Access-Control-Max-Age", "86400");
