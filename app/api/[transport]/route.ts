@@ -471,8 +471,50 @@ const handler = createMcpHandler(
 // No auth: Claude.ai custom connectors do not support static header tokens
 // (only OAuth 2.1), so the endpoint is left open. The Vercel URL is kept
 // private as the protection.
+//
+// CORS: the Claude web app connects to the MCP endpoint from the browser, so
+// the responses must carry CORS headers and answer the OPTIONS preflight.
+// Without them the browser blocks the request and Claude reports "couldn't
+// connect". mcp-handler does not add these itself.
 // ---------------------------------------------------------------------------
 
-const route = handler as unknown as (req: Request) => Promise<Response>;
+function applyCors(headers: Headers, req: Request): void {
+  const origin = req.headers.get("origin") ?? "*";
+  headers.set("Access-Control-Allow-Origin", origin);
+  headers.set("Vary", "Origin");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  headers.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, Accept, mcp-session-id, mcp-protocol-version",
+  );
+  headers.set("Access-Control-Expose-Headers", "mcp-session-id");
+  headers.set("Access-Control-Max-Age", "86400");
+}
+
+const inner = handler as unknown as (req: Request) => Promise<Response>;
+
+function withCors(
+  fn: (req: Request) => Promise<Response>,
+): (req: Request) => Promise<Response> {
+  return async (req: Request) => {
+    const res = await fn(req);
+    const headers = new Headers(res.headers);
+    applyCors(headers, req);
+    // Preserve the (possibly streaming SSE) body and status.
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+  };
+}
+
+const route = withCors(inner);
+
+export function OPTIONS(req: Request): Response {
+  const headers = new Headers();
+  applyCors(headers, req);
+  return new Response(null, { status: 204, headers });
+}
 
 export { route as GET, route as POST, route as DELETE };
