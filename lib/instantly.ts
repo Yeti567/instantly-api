@@ -69,12 +69,16 @@ export async function instantlyRequest<T = unknown>(
     }
   }
 
+  // Resolve the key before the try block so a missing-key error surfaces as a
+  // configuration error, not as a masked network error.
+  const apiKey = getApiKey();
+
   let res: Response;
   try {
     res = await fetch(url, {
       method,
       headers: {
-        Authorization: `Bearer ${getApiKey()}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },

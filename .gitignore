@@ -5,6 +5,9 @@
 /.next
 /out
 
+# vercel
+.vercel
+
 # production
 /build
 
@@ -26,3 +29,5 @@ yarn-error.log*
 .DS_Store
 .vscode
 .idea
+
+.vercel
