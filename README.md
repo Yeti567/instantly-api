@@ -4,7 +4,7 @@ A remote [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server 
 
 ## What it does
 
-The server holds your Instantly V2 API key on the server side and exposes a small, safe set of tools over the MCP Streamable HTTP transport. Every request must present a shared secret, so the URL alone cannot act on your account. Each tool is a plain stateless request to Instantly, so there is no database or session store.
+The server holds your Instantly V2 API key on the server side and exposes a small, safe set of tools over the MCP Streamable HTTP transport. The endpoint is unauthenticated, so keep your Vercel URL private; anyone who knows it can act on your Instantly account. Each tool is a plain stateless request to Instantly, so there is no database or session store.
 
 ## Tools
 
@@ -26,7 +26,6 @@ The server holds your Instantly V2 API key on the server side and exposes a smal
 | Variable | Purpose |
 | --- | --- |
 | `INSTANTLY_API_KEY` | Your Instantly V2 API key. Create one in Instantly under Settings, Integrations, API. It must be a V2 key (V1 keys do not work). |
-| `MCP_AUTH_TOKEN` | A long random secret that callers must present on every request. Generate one with, for example, `openssl rand -hex 32`. |
 
 Copy `.env.example` to `.env.local` and fill in real values. Never commit `.env.local`.
 
@@ -48,19 +47,18 @@ curl http://localhost:3000/api/health
 Smoke test the MCP endpoint (lists tools and calls `list_campaigns`):
 
 ```bash
-MCP_TOKEN=your_mcp_auth_token node scripts/smoke-test.mjs
+node scripts/smoke-test.mjs
 ```
 
-You can also point the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector) at `http://localhost:3000/api/mcp` using Streamable HTTP, with an `Authorization: Bearer <MCP_AUTH_TOKEN>` header.
+You can also point the official [MCP Inspector](https://github.com/modelcontextprotocol/inspector) at `http://localhost:3000/api/mcp` using Streamable HTTP. No auth header is required.
 
 ## Deploy to Vercel
 
 1. Push this repo to GitHub (account `Yeti567`).
 2. In Vercel, click New Project and import the repo.
 3. Under Settings, Functions, turn on Fluid compute (recommended for this workload).
-4. Under Settings, Environment Variables, add both variables for Production (and Preview if you want):
+4. Under Settings, Environment Variables, add the variable for Production (and Preview if you want):
    - `INSTANTLY_API_KEY`
-   - `MCP_AUTH_TOKEN`
 5. Deploy. Your MCP endpoint will be:
 
    ```
@@ -81,10 +79,8 @@ Whenever you change the env vars, redeploy so the new values take effect.
    https://PROJECT.vercel.app/api/mcp
    ```
 
-4. For authentication, provide the secret so Claude sends it as `Authorization: Bearer <MCP_AUTH_TOKEN>`. Use the exact value of your `MCP_AUTH_TOKEN`.
+4. For authentication, choose "No authentication" (the endpoint is open). Claude.ai custom connectors do not support static header tokens, only OAuth 2.1.
 5. Save and connect. Claude will list the six tools above. Ask it to, for example, "list my Instantly campaigns" to confirm it works.
-
-If your client cannot set an `Authorization` header, the server also accepts the secret in an `x-mcp-token` header.
 
 ## Notes on the V2 API
 
@@ -95,5 +91,5 @@ If your client cannot set an `Authorization` header, the server also accepts the
 ## Security
 
 - The Instantly key lives only in the server environment. It is never logged, never returned in a response, and never sent to the client.
-- Every MCP request must present `MCP_AUTH_TOKEN`. Requests without it get a 401.
+- The MCP endpoint is unauthenticated. Keep your Vercel URL private; anyone who knows it can act on your Instantly account through these tools.
 - API errors (auth failure, rate limit, not found) are turned into short, actionable messages, never raw stack traces.

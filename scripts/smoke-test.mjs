@@ -3,7 +3,7 @@
 // lists the tools, and calls list_campaigns.
 //
 // Usage:
-//   MCP_URL=http://localhost:3000/api/mcp MCP_TOKEN=... node scripts/smoke-test.mjs
+//   MCP_URL=http://localhost:3000/api/mcp node scripts/smoke-test.mjs
 //
 // With a real INSTANTLY_API_KEY in the server env, list_campaigns returns real
 // data. With a fake key it returns a clean auth-failure message (still proves
@@ -13,11 +13,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const url = process.env.MCP_URL ?? "http://localhost:3000/api/mcp";
-const token = process.env.MCP_TOKEN ?? "local-test-secret-123";
 
-const transport = new StreamableHTTPClientTransport(new URL(url), {
-  requestInit: { headers: { Authorization: `Bearer ${token}` } },
-});
+const transport = new StreamableHTTPClientTransport(new URL(url));
 
 const client = new Client({ name: "smoke-test", version: "1.0.0" });
 

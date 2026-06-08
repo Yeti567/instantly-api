@@ -468,49 +468,11 @@ const handler = createMcpHandler(
 );
 
 // ---------------------------------------------------------------------------
-// Auth wrapper: every request must present the shared secret.
+// No auth: Claude.ai custom connectors do not support static header tokens
+// (only OAuth 2.1), so the endpoint is left open. The Vercel URL is kept
+// private as the protection.
 // ---------------------------------------------------------------------------
 
-function unauthorized(message: string): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status: 401,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+const route = handler as unknown as (req: Request) => Promise<Response>;
 
-function withAuth(
-  inner: (req: Request) => Promise<Response>,
-): (req: Request) => Promise<Response> {
-  return async (req: Request) => {
-    const expected = process.env.MCP_AUTH_TOKEN;
-    if (!expected) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Server is not configured: MCP_AUTH_TOKEN is missing. Set it in the deployment environment.",
-        }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    const authHeader = req.headers.get("authorization") ?? "";
-    const bearer = authHeader.toLowerCase().startsWith("bearer ")
-      ? authHeader.slice(7).trim()
-      : "";
-    const provided = bearer || (req.headers.get("x-mcp-token") ?? "");
-
-    if (!provided) {
-      return unauthorized(
-        "Missing credentials. Send Authorization: Bearer <token> or an x-mcp-token header.",
-      );
-    }
-    if (provided !== expected) {
-      return unauthorized("Invalid token.");
-    }
-    return inner(req);
-  };
-}
-
-const authed = withAuth(handler as unknown as (req: Request) => Promise<Response>);
-
-export { authed as GET, authed as POST, authed as DELETE };
+export { route as GET, route as POST, route as DELETE };

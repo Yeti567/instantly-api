@@ -10,7 +10,6 @@ export function GET(): Response {
       mcp_endpoint: "/api/mcp",
       configured: {
         instantly_api_key: Boolean(process.env.INSTANTLY_API_KEY),
-        mcp_auth_token: Boolean(process.env.MCP_AUTH_TOKEN),
       },
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
