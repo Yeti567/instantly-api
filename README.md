@@ -8,18 +8,37 @@ The server holds your Instantly V2 API key on the server side and exposes a smal
 
 ## Tools
 
+**Campaigns and sequences**
+
 | Tool | What it does | Required inputs |
 | --- | --- | --- |
 | `list_campaigns` | Lists your campaigns with id, name, and status label. | none (optional `limit`, `search`) |
-| `get_campaign_analytics` | Returns sent, opens, replies, and bounces for one campaign. | `campaign_id` |
+| `get_campaign` | Returns one campaign's full config: name, status, schedule, and ordered steps with subjects and delays. | `campaign_id` |
 | `create_campaign` | Creates a campaign with a sending schedule and email sequence steps. | `consent_confirmed`, `name`, `sequence_steps` |
 | `add_sequence_step` | Appends one email step to an existing campaign's sequence. | `campaign_id`, `subject`, `body` |
+| `activate_campaign` | Activates (starts) a campaign, after a consent and readiness check. | `consent_confirmed`, `campaign_id` |
+| `pause_campaign` | Pauses an active campaign so it stops sending. | `campaign_id` |
+
+**Analytics**
+
+| Tool | What it does | Required inputs |
+| --- | --- | --- |
+| `get_campaign_analytics` | Sent, opens, open rate, replies, reply rate, bounces, bounce rate, and opportunities. One campaign or all. | none (optional `campaign_id`, date range) |
+| `get_campaign_analytics_daily` | Day-by-day sent/opens/replies/bounces for a campaign. | `campaign_id` |
+| `get_campaign_step_analytics` | Per-step sent, opens, replies, and rates, with each step's subject. | `campaign_id` |
+
+**Leads and accounts**
+
+| Tool | What it does | Required inputs |
+| --- | --- | --- |
 | `add_leads_to_campaign` | Adds one or more leads to a campaign. | `consent_confirmed`, `campaign_id`, `leads` |
 | `update_lead_status` | Updates a lead's interest status (by email). | `lead_email`, `interest_status` |
+| `list_campaign_leads` | Lists leads in a campaign with name, email, step, and interest status. | `campaign_id` |
+| `list_accounts` | Lists connected sending mailboxes with status, warmup status/score, and daily limit. | none (optional `limit`) |
 
 ### Compliance guardrail
 
-`create_campaign` and `add_leads_to_campaign` can cause real cold email to be sent. Both require a `consent_confirmed` boolean that must be `true`. Setting it to `true` asserts that every lead has given consent and has been checked against your suppression and unsubscribe lists, in line with CASL and PIPEDA. If `consent_confirmed` is `false`, the tool refuses and returns a clear message before any API call is made.
+`create_campaign`, `add_leads_to_campaign`, and `activate_campaign` can cause real cold email to be sent. They require a `consent_confirmed` boolean that must be `true`. Setting it to `true` asserts that every lead has given consent and has been checked against your suppression and unsubscribe lists, in line with CASL and PIPEDA. If `consent_confirmed` is `false`, the tool refuses and returns a clear message before any API call is made. `activate_campaign` additionally refuses to start a campaign that has no sequence steps or no attached sending account.
 
 ## Required environment variables
 
@@ -80,13 +99,23 @@ Whenever you change the env vars, redeploy so the new values take effect.
    ```
 
 4. For authentication, choose "No authentication" (the endpoint is open). Claude.ai custom connectors do not support static header tokens, only OAuth 2.1.
-5. Save and connect. Claude will list the six tools above. Ask it to, for example, "list my Instantly campaigns" to confirm it works.
+5. Save and connect. Claude will list the tools above. Ask it to, for example, "list my Instantly campaigns" to confirm it works.
 
 ## Notes on the V2 API
 
 - Base URL: `https://api.instantly.ai/api/v2`. Auth header: `Authorization: Bearer <INSTANTLY_API_KEY>`.
 - `add_sequence_step` reads the campaign, appends a step, and saves it back with `PATCH /campaigns/{id}`, because the V2 API has no dedicated append-step endpoint.
 - `update_lead_status` maps friendly names (Interested, Meeting Booked, Won, and so on) to the Instantly `lt_interest_status` values.
+- **Timezone is a curated enum, not the full IANA database.** `create_campaign`'s schedule `timezone` must be one of a specific set Instantly accepts (for example `America/Chicago`, `America/Detroit`, `America/Boise`, `America/Dawson`, `America/Glace_Bay`). Common names outside that set, including most Canadian zones (`America/Edmonton`, `America/Toronto`, `America/Vancouver`) and most `Etc/GMT±N` offsets, are rejected with a generic `HTTP 400`. The connector handles this for you: it auto-maps common zones to an accepted equivalent with the same offset and DST rules (`America/Edmonton → America/Boise`, `America/Toronto → America/Detroit`, and so on), defaults to `America/Boise` (Mountain), and rejects an unmapped zone with a clear pre-flight error instead of a bare 400. The accepted set and mappings live in `lib/instantly.ts` (`INSTANTLY_TIMEZONES`, `TIMEZONE_ALIASES`); re-verify them if Instantly changes the enum.
+- Bodyless endpoints (`DELETE`, `activate`, `pause`) must be sent with **no body and no `Content-Type`** header; the client (`instantlyRequest`) only sets `Content-Type: application/json` when a body is present.
+
+## Deployment and data residency
+
+- **Live deployment:** `https://instantly-api-two.vercel.app` — MCP endpoint at `https://instantly-api-two.vercel.app/api/mcp`.
+- **Vercel project:** `instantly-api` (GitHub `Yeti567/instantly-api`).
+- **Version:** server `1.0.0` (see `serverInfo` in the route).
+- **Data residency:** Instantly is **US-hosted**. Campaign, lead, and analytics data sent through this connector is processed and stored in the United States. Note this for client security questionnaires.
+- **Key rotation:** rotate `INSTANTLY_API_KEY` every 90 days, and re-run the three test cases after any connector change. When Instantly ships a V2 API change, re-verify the `create_campaign` payload shape and the timezone enum first, since those are the brittle points.
 
 ## Security
 
