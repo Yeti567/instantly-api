@@ -152,7 +152,18 @@ const handler = createMcpHandler(
           >("GET", "/campaigns/analytics/overview", {
             query: { id: campaign_id, start_date, end_date },
           });
-          const rows = Array.isArray(data) ? data : data ? [data] : [];
+          const rawRows = Array.isArray(data) ? data : data ? [data] : [];
+          // Fail closed on scope: when a single campaign is requested, drop any
+          // row that belongs to a different campaign. If the `id` query param is
+          // ever ignored and the API returns every workspace campaign, this
+          // keeps only the requested one rather than reporting all of them.
+          // Rows that omit campaign_id are kept, since the single-campaign
+          // response does not always echo the id back.
+          const rows = campaign_id
+            ? rawRows.filter(
+                (r) => r.campaign_id == null || r.campaign_id === campaign_id,
+              )
+            : rawRows;
           if (campaign_id && rows.length === 0) {
             return fail(
               "No analytics found for that campaign_id. Confirm it is correct with list_campaigns.",
@@ -806,8 +817,13 @@ const handler = createMcpHandler(
         run(async () => {
           // NOTE: redact email before any internal log write. We do not log
           // contact rows here; only return them to the caller.
+          //
+          // The native filter key on POST /leads/list is `campaign` (matching
+          // the `campaign` UUID field on the lead entity), NOT `campaign_id`.
+          // Sending `campaign_id` was silently ignored, so the API returned the
+          // whole workspace lead list regardless of the campaign requested.
           const data = await instantlyRequest<unknown>("POST", "/leads/list", {
-            body: { campaign_id, limit: limit ?? 50 },
+            body: { campaign: campaign_id, limit: limit ?? 50 },
           });
           const container = data as Record<string, unknown> | undefined;
           const items: Array<Record<string, unknown>> = Array.isArray(data)
@@ -815,7 +831,27 @@ const handler = createMcpHandler(
             : ((container?.items ?? container?.data ?? []) as Array<
                 Record<string, unknown>
               >);
-          let leads = items.map((l) => ({
+
+          // Fail closed on scope: never return a lead that belongs to a
+          // different campaign. If the API ever ignores the filter again (wrong
+          // key, proxy quirk), this drops every off-campaign lead so the tool
+          // returns an empty list rather than another campaign's audience.
+          const scoped = items.filter((l) => l.campaign === campaign_id);
+
+          // The API returned leads but none were scoped to this campaign. That
+          // means the body filter key was not honored. Surface it loudly
+          // instead of returning a misleading empty list.
+          if (items.length > 0 && scoped.length === 0) {
+            return ok({
+              campaign_id,
+              count: 0,
+              leads: [],
+              warning:
+                "Instantly returned leads but none were scoped to this campaign. The /leads/list body filter key may be wrong; verify it against the live API (try 'campaign' vs 'campaign_id').",
+            });
+          }
+
+          let leads = scoped.map((l) => ({
             email: l.email ?? null,
             first_name: l.first_name ?? null,
             last_name: l.last_name ?? null,
